@@ -1,0 +1,103 @@
+name: Validate
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check SKILL.md line count
+        run: |
+          LINES=$(wc -l < skills/seedcli/SKILL.md)
+          echo "SKILL.md has $LINES lines"
+          if [ "$LINES" -gt 500 ]; then
+            echo "ERROR: SKILL.md exceeds 500 lines ($LINES lines)"
+            exit 1
+          fi
+
+      - name: Validate frontmatter
+        run: |
+          head -1 skills/seedcli/SKILL.md | grep -q "^---$" || { echo "Missing frontmatter opening ---"; exit 1; }
+          sed -n '2,/^---$/p' skills/seedcli/SKILL.md | head -1 | grep -q "^name:" || { echo "Missing name in frontmatter"; exit 1; }
+
+      - name: Check required files exist
+        run: |
+          FILES=(
+            "skills/seedcli/SKILL.md"
+            "skills/seedcli/references/core.md"
+            "skills/seedcli/references/print.md"
+            "skills/seedcli/references/prompt.md"
+            "skills/seedcli/references/filesystem.md"
+            "skills/seedcli/references/system.md"
+            "skills/seedcli/references/http.md"
+            "skills/seedcli/references/template.md"
+            "skills/seedcli/references/config.md"
+            "skills/seedcli/references/strings.md"
+            "skills/seedcli/references/patching.md"
+            "skills/seedcli/references/semver.md"
+            "skills/seedcli/references/package-manager.md"
+            "skills/seedcli/references/completions.md"
+            "skills/seedcli/references/testing.md"
+            "skills/seedcli/references/ui.md"
+            "skills/seedcli/references/plugin-system.md"
+            "skills/seedcli/references/seed-umbrella.md"
+            "skills/seedcli/references/build-distribution.md"
+            "skills/seedcli/references/type-safety.md"
+            "skills/seedcli/examples/common-patterns.md"
+            "skills/seedcli/examples/project-scaffolds.md"
+          )
+          MISSING=0
+          for f in "${FILES[@]}"; do
+            if [ ! -f "$f" ]; then
+              echo "MISSING: $f"
+              MISSING=$((MISSING + 1))
+            fi
+          done
+          if [ "$MISSING" -gt 0 ]; then
+            echo "ERROR: $MISSING required files are missing"
+            exit 1
+          fi
+          echo "All required files present"
+
+      - name: Check internal reference links
+        run: |
+          cd skills/seedcli
+          BROKEN=0
+          for link in $(grep -oP '\[.*?\]\((references/[^)]+|examples/[^)]+)\)' SKILL.md | grep -oP '\(([^)]+)\)' | tr -d '()'); do
+            if [ ! -f "$link" ]; then
+              echo "BROKEN LINK: $link"
+              BROKEN=$((BROKEN + 1))
+            fi
+          done
+          if [ "$BROKEN" -gt 0 ]; then
+            echo "ERROR: $BROKEN broken links in SKILL.md"
+            exit 1
+          fi
+          echo "All links valid"
+
+      - name: Lint markdown (basic)
+        run: |
+          ISSUES=0
+          for f in $(find skills -name "*.md"); do
+            # Check for trailing whitespace
+            if grep -Pn '\s+$' "$f" > /dev/null 2>&1; then
+              echo "WARNING: Trailing whitespace in $f"
+            fi
+            # Check for consistent heading structure
+            if head -1 "$f" | grep -q "^---$"; then
+              # Has frontmatter — OK
+              true
+            elif head -1 "$f" | grep -q "^# "; then
+              # Starts with H1 — OK
+              true
+            else
+              echo "WARNING: $f doesn't start with frontmatter or H1"
+            fi
+          done
+          echo "Markdown lint complete"
