@@ -7,7 +7,7 @@ This skill helps AI coding agents understand Seed CLI APIs and generate seedcli-
 ## Install
 
 ```bash
-npx skills add SeedCLI/skills
+npx skills add SeedCLI/seedcli-skills
 ```
 
 ## What it does
