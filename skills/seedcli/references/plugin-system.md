@@ -70,7 +70,7 @@ export default defineExtension({
   description: "Authentication management",
   dependencies: ["config"],  // Optional: run after these extensions
   setup: async (seed) => {
-    const token = await seed.config.get("authToken")
+    const token = seed.system.env("AUTH_TOKEN")
     seed.auth = { token, isAuthenticated: !!token }
   },
   teardown: async (seed) => {

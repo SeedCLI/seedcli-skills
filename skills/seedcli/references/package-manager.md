@@ -3,19 +3,44 @@
 
 ## Import
 ```ts
-import { detect, install, installDev, remove, run, create } from "@seedcli/package-manager"
-// Via seed context: seed.packageManager.*
-// Via umbrella: import { detectPackageManager, installPackages, installDevPackages, removePackages, runScript, createPackageManager } from "@seedcli/seed"
+import {
+  create,
+  detect,
+  detectFromUserAgent,
+  getCommands,
+  install,
+  installDev,
+  pmRunPrefix,
+  remove,
+  run,
+} from "@seedcli/package-manager"
 ```
+
+In Seed commands, `detect`, `create`, `install`, `installDev`, `remove`, `run`, and `getCommands` are also available as `seed.packageManager.*`.
 
 ## Detection
 
 ```ts
 const pm = await seed.packageManager.detect()
-// "bun" | "npm" | "yarn" | "pnpm"
+// => "bun" | "npm" | "yarn" | "pnpm"
 ```
 
-Priority: `bun.lock`/`bun.lockb` → `package-lock.json` → `yarn.lock` → `pnpm-lock.yaml` → `packageManager` field → default: `bun`.
+Detection priority:
+1. `bun.lock` / `bun.lockb`
+2. `package-lock.json`
+3. `yarn.lock`
+4. `pnpm-lock.yaml`
+5. `packageManager` field in `package.json`
+6. Default: `npm`
+
+## Detect From User Agent
+
+```ts
+const pm = detectFromUserAgent()
+// => "bun" | "npm" | "yarn" | "pnpm" | undefined
+```
+
+Reads `process.env.npm_config_user_agent` to infer the invoking package manager.
 
 ## Install Packages
 
@@ -30,7 +55,7 @@ await seed.packageManager.install(["express"], {
 })
 ```
 
-Options: `cwd`, `exact` (false), `global` (false), `silent` (false).
+Options: `cwd`, `exact`, `global`, `silent`.
 
 ## Remove Packages
 
@@ -51,20 +76,37 @@ Options: `cwd`, `args`, `silent`.
 ## Package Manager Instance
 
 ```ts
-const pm = await seed.packageManager.create()      // Auto-detect
-const pm = await seed.packageManager.create("bun")  // Explicit
+const pm = await seed.packageManager.create("bun")
+// or auto-detect:
+const detectedPm = await seed.packageManager.create()
 
-await pm.install(["express"])
-await pm.installDev(["typescript"])
-await pm.remove(["old-package"])
-await pm.run("build")
-const version = await pm.version()  // "1.3.5"
-console.log(pm.name)                // "bun"
+await detectedPm.install(["express"])
+await detectedPm.installDev(["typescript"])
+await detectedPm.remove(["old-package"])
+await detectedPm.run("build")
+
+const version = await detectedPm.version()
+console.log(detectedPm.name)
 ```
 
 ## Get Commands
 
 ```ts
-seed.packageManager.getCommands("bun")
-// { install: "bun install", add: "bun add", addDev: ["bun", "add", "-d"], remove: "bun remove", run: "bun run" }
+const commands = seed.packageManager.getCommands("bun")
+// {
+//   install: "bun install",
+//   add: "bun add",
+//   addDev: ["bun", "add", "-d"],
+//   remove: "bun remove",
+//   run: "bun run",
+// }
+```
+
+## Run Prefix Helper
+
+```ts
+pmRunPrefix("npm")  // => "npm run"
+pmRunPrefix("pnpm") // => "pnpm run"
+pmRunPrefix("bun")  // => "bun run"
+pmRunPrefix("yarn") // => "yarn"
 ```

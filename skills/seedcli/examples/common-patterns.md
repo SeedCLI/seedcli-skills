@@ -18,7 +18,7 @@ export default command({
     template: flag({
       type: "string",
       alias: "t",
-      choices: ["minimal", "full", "api"] as const,
+      choices: ["minimal", "full", "plugin"] as const,
     }),
     skipInstall: flag({ type: "boolean", alias: "s", description: "Skip dependency installation" }),
   },
@@ -27,7 +27,7 @@ export default command({
     const name = seed.args.name ?? await seed.prompt.input({ message: "Project name?" })
     const template = seed.flags.template ?? await seed.prompt.select({
       message: "Template?",
-      choices: ["minimal", "full", "api"] as const,
+      choices: ["minimal", "full", "plugin"] as const,
     })
 
     const features = await seed.prompt.multiselect({
@@ -59,7 +59,7 @@ export default command({
 
     // Summary
     seed.print.newline()
-    seed.print.box(`Project "${name}" created!\n\ncd ${name}\nbun dev`, {
+    seed.print.box(`Project "${name}" created!\n\ncd ${name}\n# then run your package manager's dev script`, {
       borderColor: "green",
       borderStyle: "round",
       padding: 1,

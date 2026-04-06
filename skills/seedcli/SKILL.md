@@ -1,11 +1,11 @@
 ---
 name: seedcli
-description: Generates code and provides API reference for Seed CLI, a batteries-included TypeScript-first CLI framework powered by Bun. Covers all @seedcli/* packages including core builder, commands, plugins, extensions, prompts, filesystem, HTTP, templates, and testing. Use when working with seedcli, @seedcli/core, @seedcli/seed, building CLI tools with Bun, or generating seedcli commands, plugins, and extensions.
+description: Generates code and provides API reference for Seed CLI, a batteries-included TypeScript-first CLI framework for Node.js. Covers all @seedcli/* packages including core builder, commands, plugins, extensions, prompts, filesystem, HTTP, templates, and testing. Use when working with seedcli, @seedcli/core, @seedcli/seed, building CLI tools for Node.js, or generating seedcli commands, plugins, and extensions.
 ---
 
 # Seed CLI
 
-Seed CLI is a batteries-included, modular, TypeScript-first CLI framework powered by **Bun** (>=1.3.9). It provides 18 packages under `@seedcli/*` covering everything from command parsing to HTTP clients, file operations, interactive prompts, and testing.
+Seed CLI is a batteries-included, modular, TypeScript-first CLI framework for **Node.js 24+**. It provides 18 packages under `@seedcli/*` covering command parsing, prompts, filesystem, HTTP, testing, build tooling, and distribution.
 
 ## Two Entry Patterns
 
@@ -14,7 +14,7 @@ Seed CLI is a batteries-included, modular, TypeScript-first CLI framework powere
 import { build } from "@seedcli/core"
 
 const runtime = build("my-cli")
-  .src(import.meta.dir) // Auto-discover commands/ and extensions/
+  .src(import.meta.dirname) // Auto-discovers commands/ and extensions/
   .version("1.0.0")
   .help()
   .debug()
@@ -34,7 +34,9 @@ await run({
     command({
       name: "hello",
       args: { name: arg({ type: "string", required: true }) },
-      run: (seed) => seed.print.info(`Hello, ${seed.args.name}!`),
+      run: ({ args, print }) => {
+        print.info(`Hello, ${args.name}!`)
+      },
     }),
   ],
 })
@@ -44,12 +46,15 @@ await run({
 
 Create a new project:
 ```bash
-bun create seedcli my-cli
+npm create seedcli my-cli
+# or: pnpm create seedcli my-cli
+# or: yarn create seedcli my-cli
+# or: bun create seedcli my-cli
 # or: seed new my-cli
 ```
 
-Standard project structure:
-```
+Standard Full template structure:
+```text
 my-cli/
 ├── src/
 │   ├── commands/      # Auto-discovered by .src()
@@ -59,8 +64,10 @@ my-cli/
 │   └── index.ts       # Entry point with build().create()
 ├── tests/
 │   └── hello.test.ts
-├── seed.config.ts     # Dev/build configuration
+├── .gitignore
+├── biome.json
 ├── package.json
+├── seed.config.ts
 └── tsconfig.json
 ```
 
@@ -90,21 +97,18 @@ export default command({
       choices: ["us-east-1", "eu-west-1"] as const,
     }),
   },
-  run: async (seed) => {
-    // seed.args.environment → "staging" | "production" (fully typed)
-    // seed.flags.force → boolean | undefined
-    // seed.flags.region → "us-east-1" | "eu-west-1" | undefined
-    seed.print.info(`Deploying to ${seed.args.environment}...`)
+  run: async ({ args, print }) => {
+    print.info(`Deploying to ${args.environment}...`)
   },
 })
 ```
 
-**Arg types**: `"string"`, `"number"` — with optional `required`, `default`, `choices`, `validate`.
-**Flag types**: `"boolean"`, `"string"`, `"number"`, `"string[]"`, `"number[]"` — with optional `alias`, `required`, `default`, `choices`, `validate`, `hidden`.
+**Arg types**: `"string"`, `"number"` with optional `required`, `default`, `choices`, `validate`.
+**Flag types**: `"boolean"`, `"string"`, `"number"`, `"string[]"`, `"number[]"` with optional `alias`, `required`, `default`, `choices`, `validate`, `hidden`.
 
 ### Subcommands
 
-Nested via `subcommands` option or directory structure:
+Nested via `subcommands` or directory structure:
 ```ts
 export default command({
   name: "db",
@@ -113,29 +117,29 @@ export default command({
 // Usage: my-cli db migrate --up
 ```
 
-Or via auto-discovery (`src/commands/db/migrate.ts` → `my-cli db migrate`).
+Or via auto-discovery (`src/commands/db/migrate.ts` -> `my-cli db migrate`).
 
 ### The Seed Context
 
-Every command's `run` receives a `seed` object with typed args/flags and lazily-loaded modules:
+Every command's `run` receives a `seed` object with typed args/flags and lazily loaded modules:
 ```ts
 interface Seed<TArgs, TFlags> {
   args: TArgs
   flags: TFlags
   parameters: { raw: string[]; argv: string[]; command: string | undefined }
-  // Modules (lazy-loaded)
   print: PrintModule
   prompt: PromptModule
-  filesystem: FilesystemModule
-  system: SystemModule
+  filesystem: typeof import("@seedcli/filesystem")
+  system: typeof import("@seedcli/system")
   http: HttpModule
   template: TemplateModule
   patching: PatchingModule
   strings: StringsModule
-  semver: SemverModule
+  semver: typeof import("@seedcli/semver")
   packageManager: PackageManagerModule
   config: ConfigModule
-  // Metadata
+  ui: typeof import("@seedcli/ui")
+  completions: typeof import("@seedcli/completions")
   meta: { version: string; commandName: string; brand: string; debug: boolean }
 }
 ```
@@ -144,28 +148,39 @@ interface Seed<TArgs, TFlags> {
 
 ```ts
 build("my-cli")
-  .src(import.meta.dir)           // Auto-discover commands/ and extensions/
-  .command(cmd)                    // Register command manually
+  .src(import.meta.dirname)        // Auto-discovers commands/ and extensions/
+  .command(cmd)                    // Register one command manually
   .commands([cmd1, cmd2])          // Register multiple commands
-  .defaultCommand(cmd)             // Fallback when no command specified
-  .extension(ext)                  // Register extension
-  .plugin("seedcli-plugin-docker") // Load plugin by name
-  .plugins("./plugins")            // Discover plugins from directory
-  .help()                          // Enable --help flag
-  .version("1.0.0")               // Enable --version flag
-  .debug()                         // Enable --debug/--verbose flags
-  .completions()                   // Enable shell completions subcommand
+  .defaultCommand(cmd)             // Fallback when no command is specified
+  .extension(ext)                  // Register an extension
+  .plugin(importedPlugin)          // Preferred for plugin type augmentation
+  .plugin("seedcli-plugin-docker") // Or load by package name
+  .plugins("./plugins", { matching: "my-*" })
+  .help()                          // Enable --help
+  .version()                       // Enable --version; auto-detect when .src() is set
+  .debug()                         // Enable --debug / --verbose
+  .completions()                   // Add shell completions subcommand
   .middleware(fn)                  // Global middleware
-  .config({ name: "myapp" })      // Auto-load config files
   .exclude(["http", "template"])   // Exclude unused modules
-  .onReady(fn)                     // Hook: after setup, before command
+  .onReady(fn)                     // Hook before command execution
   .onError(fn)                     // Global error handler
-  .create()                        // Build the Runtime
+  .create()
 ```
 
 ### Runtime Lifecycle
 
-1. Register signal handlers → 2. Parse argv → 3. Load config → 4. Load plugins → 5. Register extensions → 6. Assemble seed context → 7. `onReady` hooks → 8. Route to command → 9. Extension `setup` (topological order) → 10. Global middleware → 11. Command middleware → 12. `command.run(seed)` → 13. Extension `teardown` (reverse order) → 14. Cleanup
+1. Register signal handlers
+2. Strip `--debug` / `--verbose` flags when enabled
+3. Handle `--version` / `--help` early exits
+4. Discover and load plugins, register extensions
+5. Route to the matching command
+6. Parse command-specific args and flags
+7. Assemble the seed context
+8. Run `onReady` hooks
+9. Run extension `setup` functions
+10. Run global middleware -> command middleware -> `command.run(seed)`
+11. Run extension `teardown` in reverse order
+12. Cleanup
 
 ## Code Generation Templates
 
@@ -173,31 +188,24 @@ build("my-cli")
 ```ts
 import { build } from "@seedcli/core"
 
-const runtime = build("{{name}}")
-  .src(import.meta.dir)
-  .version("0.0.1")
+const cli = build("{{name}}")
+  .src(import.meta.dirname)
   .help()
-  .debug()
+  .version("0.1.0")
   .create()
 
-await runtime.run()
+await cli.run()
 ```
 
 ### Command
 ```ts
-import { command, arg, flag } from "@seedcli/core"
+import { command } from "@seedcli/core"
 
 export default command({
   name: "{{name}}",
-  description: "{{description}}",
-  args: {
-    // name: arg({ type: "string", required: true }),
-  },
-  flags: {
-    // verbose: flag({ type: "boolean", alias: "v" }),
-  },
-  run: async (seed) => {
-    // Implementation
+  description: "TODO: describe the {{name}} command",
+  run: async ({ print }) => {
+    print.info("Running {{name}} command")
   },
 })
 ```
@@ -208,14 +216,9 @@ import { defineExtension } from "@seedcli/core"
 
 export default defineExtension({
   name: "{{name}}",
-  description: "{{description}}",
-  // dependencies: ["other-ext"],  // Run after these
+  description: "TODO: describe the {{name}} extension",
   setup: async (seed) => {
-    // Initialize shared state
-    seed.{{name}} = { /* ... */ }
-  },
-  teardown: async (seed) => {
-    // Cleanup resources
+    // Extend the seed context with your custom functionality
   },
 })
 ```
@@ -233,7 +236,7 @@ declare module "@seedcli/core" {
 
 ### Plugin
 ```ts
-import { definePlugin, command, flag } from "@seedcli/core"
+import { definePlugin, command } from "@seedcli/core"
 
 export default definePlugin({
   name: "{{name}}",
@@ -242,12 +245,11 @@ export default definePlugin({
   seedcli: ">=1.0.0",
   commands: [
     command({
-      name: "{{name}}:run",
-      run: async (seed) => { /* ... */ },
+      name: "hello",
+      run: async ({ print }) => {
+        print.info("Hello from plugin")
+      },
     }),
-  ],
-  extensions: [
-    { name: "{{name}}-check", setup: async (seed) => { /* ... */ } },
   ],
   templates: "./templates",
   defaults: { /* default config */ },
@@ -259,16 +261,15 @@ export default definePlugin({
 import type { Middleware } from "@seedcli/core"
 
 const {{name}}: Middleware = async (seed, next) => {
-  // Before command
-  await next() // Run next middleware or command
-  // After command
+  await next()
 }
 ```
 
 ### Test
 ```ts
+import { build } from "@seedcli/core"
 import { createTestCli } from "@seedcli/testing"
-import { describe, test, expect } from "bun:test"
+import { describe, expect, test } from "vitest"
 
 const runtime = build("test-cli").src("./src").create()
 
@@ -276,18 +277,18 @@ describe("{{command}} command", () => {
   test("executes successfully", async () => {
     const result = await createTestCli(runtime).run("{{command}} args")
     expect(result.exitCode).toBe(0)
-    expect(result.stdout).toContain("expected output")
   })
 
-  test("handles interactive prompts", async () => {
+  test("supports env overrides", async () => {
     const result = await createTestCli(runtime)
-      .mockPrompt({ "Question?": "answer" })
-      .mockConfig({ key: "value" })
+      .env({ NODE_ENV: "test" })
       .run("{{command}}")
     expect(result.exitCode).toBe(0)
   })
 })
 ```
+
+`mockPrompt()`, `mockConfig()`, and `mockSystem()` are exposed on the test builder, but `env()` is the only helper that currently affects `run()`.
 
 ### Config File
 ```ts
@@ -299,8 +300,12 @@ export default defineConfig({
   },
   build: {
     entry: "src/index.ts",
-    outDir: "dist",
-    minify: true,
+    bundle: {
+      outdir: "dist",
+    },
+    compile: {
+      targets: ["node24-macos-arm64"],
+    },
   },
 })
 ```
@@ -318,30 +323,30 @@ All packages can be imported directly or via the umbrella `@seedcli/seed` packag
 | `@seedcli/system` | `exec, shell, which, whichOrThrow, os, arch, env, open, isInteractive` | [references/system.md](references/system.md) |
 | `@seedcli/http` | `get, post, put, patch, delete, create, createOpenAPIClient, download` | [references/http.md](references/http.md) |
 | `@seedcli/template` | `generate, render, renderString, renderFile, directory` | [references/template.md](references/template.md) |
-| `@seedcli/config` | `load, loadFile, get, defineConfig` | [references/config.md](references/config.md) |
+| `@seedcli/config` | `load, loadFile, get` | [references/config.md](references/config.md) |
 | `@seedcli/strings` | `camelCase, pascalCase, snakeCase, kebabCase, plural, singular, truncate, template` | [references/strings.md](references/strings.md) |
 | `@seedcli/patching` | `patch, append, prepend, exists, patchJson` | [references/patching.md](references/patching.md) |
 | `@seedcli/semver` | `valid, satisfies, bump, compare, gt, lt, sort, maxSatisfying` | [references/semver.md](references/semver.md) |
-| `@seedcli/package-manager` | `detect, install, installDev, remove, run, create` | [references/package-manager.md](references/package-manager.md) |
+| `@seedcli/package-manager` | `detect, detectFromUserAgent, getCommands, install, installDev, pmRunPrefix, remove, run, create` | [references/package-manager.md](references/package-manager.md) |
 | `@seedcli/completions` | `bash, zsh, fish, powershell, install, detect` | [references/completions.md](references/completions.md) |
 | `@seedcli/testing` | `createTestCli, mockSeed, createInterceptor` | [references/testing.md](references/testing.md) |
-| `@seedcli/ui` | `header, status, list, countdown` | [references/ui.md](references/ui.md) |
+| `@seedcli/ui` | `header, status, list, countdown, divider, keyValue, progress, tree` | [references/ui.md](references/ui.md) |
 | `@seedcli/seed` | All of the above (re-exported) | [references/seed-umbrella.md](references/seed-umbrella.md) |
 
 Additional references:
 - [Plugin System](references/plugin-system.md) — `definePlugin`, `defineExtension`, middleware, declaration merging
-- [Build & Distribution](references/build-distribution.md) — Bundle, compile, multi-platform targets
+- [Build & Distribution](references/build-distribution.md) — `seed dev`, `seed build`, npm publishing, standalone binaries
 - [Type Safety](references/type-safety.md) — `InferArgs`, `InferFlags`, `SeedExtensions` merging
 
 ## Common Recipes
 
 See [examples/common-patterns.md](examples/common-patterns.md) for full recipes:
 - **Interactive init** — Prompt-driven project initialization with file scaffolding
-- **HTTP API wrapper** — Create a typed API client command with retry and error handling
+- **HTTP API wrapper** — Typed API client command with retry and error handling
 - **File scaffolding** — Generate files from templates with patching for barrel exports
 - **Version bumping** — Semver-aware version management with changelog updates
 
-See [examples/project-scaffolds.md](examples/project-scaffolds.md) for complete project templates:
-- **Minimal project** — Single-file CLI with inline commands
-- **Full project** — Multi-command CLI with extensions, config, and tests
-- **Plugin project** — Distributable plugin package with commands and templates
+See [examples/project-scaffolds.md](examples/project-scaffolds.md) for scaffold-aligned project templates:
+- **Minimal project** — Single-file CLI with inline command
+- **Full project** — Auto-discovered commands, extensions, config, and tests
+- **Plugin project** — Reusable plugin package with typed extensions and tests

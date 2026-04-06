@@ -103,7 +103,7 @@ Options: `indent` (default: 2), `guides` (default: true).
 ## Key-Value
 
 ```ts
-seed.print.keyValue({ Name: "my-project", Version: "1.0.0", Runtime: "Bun 1.3.5" })
+seed.print.keyValue({ Name: "my-project", Version: "1.0.0", Runtime: "Node.js 24.0.0" })
 // Or array: seed.print.keyValue([{ key: "Name", value: "my-project" }])
 ```
 

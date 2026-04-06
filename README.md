@@ -1,6 +1,6 @@
 # Seed CLI Agent Skill
 
-Agent skill for [Seed CLI](https://seedcli.dev) — a batteries-included, modular, TypeScript-first CLI framework powered by Bun.
+Agent skill for [Seed CLI](https://seedcli.dev) — a batteries-included, modular, TypeScript-first CLI framework for Node.js.
 
 This skill helps AI coding agents understand Seed CLI APIs and generate seedcli-based code. It works across Claude Code, GitHub Copilot, Cursor, Cline, Gemini CLI, Codex, and any agent that supports the [skills.sh](https://skills.sh) ecosystem.
 

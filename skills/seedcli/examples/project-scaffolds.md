@@ -1,91 +1,145 @@
 # Project Scaffolds
-> Complete project templates for different use cases.
+> Representative scaffold excerpts aligned with the current Seed project structure and tooling.
 
 ## Minimal Project
 
-A single-file CLI with inline commands:
+A single-file CLI with an inline command and a Vitest smoke test.
 
 ### `package.json`
 ```json
 {
   "name": "my-cli",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "type": "module",
-  "bin": { "my-cli": "src/index.ts" },
+  "bin": {
+    "my-cli": "./src/index.ts"
+  },
+  "scripts": {
+    "dev": "seed dev",
+    "test": "vitest run",
+    "build": "seed build",
+    "compile": "seed build --compile --outfile my-cli",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "dependencies": {
     "@seedcli/core": "latest"
   },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@biomejs/biome": "^2.4.4",
+    "@seedcli/cli": "latest",
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
   }
 }
 ```
 
 ### `src/index.ts`
 ```ts
-#!/usr/bin/env bun
-import { run, command, arg, flag } from "@seedcli/core"
+#!/usr/bin/env node
 
-await run({
-  name: "my-cli",
-  version: "0.0.1",
-  commands: [
-    command({
-      name: "greet",
-      description: "Greet someone",
-      args: { name: arg({ type: "string", required: true }) },
-      flags: { shout: flag({ type: "boolean", alias: "s" }) },
-      run: (seed) => {
-        const msg = `Hello, ${seed.args.name}!`
-        seed.print.info(seed.flags.shout ? msg.toUpperCase() : msg)
-      },
-    }),
-  ],
+import { build, command } from "@seedcli/core"
+
+const hello = command({
+  name: "hello",
+  description: "Say hello",
+  run: async ({ print }) => {
+    print.info("Hello from my-cli!")
+  },
+})
+
+const cli = build("my-cli")
+  .command(hello)
+  .help()
+  .version("0.1.0")
+  .create()
+
+await cli.run()
+```
+
+### `tests/index.test.ts`
+```ts
+import { describe, expect, test } from "vitest"
+import { execFile } from "node:child_process"
+import { join } from "node:path"
+import { promisify } from "node:util"
+
+const execFileAsync = promisify(execFile)
+
+describe("my-cli", () => {
+  test("hello command prints greeting", async () => {
+    const { stdout } = await execFileAsync("node", [
+      "--import", "tsx",
+      join(import.meta.dirname, "..", "src", "index.ts"),
+      "hello",
+    ])
+
+    expect(stdout).toContain("Hello from my-cli!")
+  })
 })
 ```
 
 ## Full Project
 
-A multi-command CLI with extensions, config, and tests:
+An auto-discovered CLI with commands, extensions, `seed.config.ts`, and tests.
 
 ### `package.json`
 ```json
 {
   "name": "my-cli",
-  "version": "0.0.1",
+  "version": "0.1.0",
   "type": "module",
-  "bin": { "my-cli": "src/index.ts" },
+  "bin": {
+    "my-cli": "./src/index.ts"
+  },
   "scripts": {
     "dev": "seed dev",
     "build": "seed build",
-    "test": "bun test"
+    "compile": "seed build --compile --outfile my-cli",
+    "test": "vitest run",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=24.0.0"
   },
   "dependencies": {
-    "@seedcli/core": "latest",
-    "@seedcli/seed": "latest"
+    "@seedcli/core": "latest"
   },
   "devDependencies": {
+    "@biomejs/biome": "^2.4.4",
     "@seedcli/cli": "latest",
     "@seedcli/testing": "latest",
-    "@types/bun": "latest"
+    "@types/node": "^24.0.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
   }
 }
 ```
 
 ### `src/index.ts`
 ```ts
-#!/usr/bin/env bun
+#!/usr/bin/env node
+
 import { build } from "@seedcli/core"
 
-const runtime = build("my-cli")
-  .src(import.meta.dir)
-  .version("0.0.1")
+const cli = build("my-cli")
+  .src(import.meta.dirname)
   .help()
-  .debug()
-  .completions()
+  .version("0.1.0")
   .create()
 
-await runtime.run()
+await cli.run()
 ```
 
 ### `src/commands/hello.ts`
@@ -96,14 +150,20 @@ export default command({
   name: "hello",
   description: "Say hello",
   args: {
-    name: arg({ type: "string", required: true, description: "Who to greet" }),
+    name: arg({ type: "string", description: "Who to greet" }),
   },
   flags: {
-    shout: flag({ type: "boolean", alias: "s", description: "SHOUT the greeting" }),
+    loud: flag({ type: "boolean", default: false, alias: "l", description: "SHOUT the greeting" }),
+    timed: flag({ type: "boolean", default: false, alias: "t", description: "Show execution time" }),
   },
-  run: async (seed) => {
-    const greeting = `Hello, ${seed.args.name}!`
-    seed.print.info(seed.flags.shout ? greeting.toUpperCase() : greeting)
+  run: async ({ args, flags, print, timer }) => {
+    if (flags.timed) timer.start()
+
+    const name = args.name ?? "World"
+    const greeting = `Hello, ${name}!`
+    print.info(flags.loud ? greeting.toUpperCase() : greeting)
+
+    if (flags.timed) print.muted(`Done in ${timer.stop()}`)
   },
 })
 ```
@@ -112,15 +172,30 @@ export default command({
 ```ts
 import { defineExtension } from "@seedcli/core"
 
+declare module "@seedcli/core" {
+  interface SeedExtensions {
+    timer: {
+      start(): void
+      stop(): string
+    }
+  }
+}
+
 export default defineExtension({
   name: "timer",
-  description: "Track command execution time",
+  description: "Simple timing utility",
   setup: (seed) => {
-    seed._startTime = Date.now()
-  },
-  teardown: (seed) => {
-    const elapsed = Date.now() - seed._startTime
-    seed.print.muted(`Done in ${elapsed}ms`)
+    let startTime = 0
+
+    seed.timer = {
+      start: () => {
+        startTime = performance.now()
+      },
+      stop: () => {
+        const elapsed = performance.now() - startTime
+        return `${elapsed.toFixed(0)}ms`
+      },
+    }
   },
 })
 ```
@@ -130,99 +205,150 @@ export default defineExtension({
 import { defineConfig } from "@seedcli/core"
 
 export default defineConfig({
-  dev: { entry: "src/index.ts" },
-  build: { entry: "src/index.ts", outDir: "dist", minify: true },
+  dev: {
+    entry: "src/index.ts",
+    clearScreen: true,
+  },
+  // build: {
+  //   entry: "src/index.ts",
+  //   bundle: {
+  //     outdir: "dist",
+  //   },
+  //   compile: {
+  //     targets: ["node24-macos-arm64"],
+  //   },
+  // },
 })
 ```
 
 ### `tests/hello.test.ts`
 ```ts
-import { createTestCli } from "@seedcli/testing"
-import { build } from "@seedcli/core"
-import { describe, test, expect } from "bun:test"
+import { describe, expect, test } from "vitest"
+import { execFile } from "node:child_process"
+import { promisify } from "node:util"
 
-const runtime = build("my-cli").src("./src").create()
+const execFileAsync = promisify(execFile)
 
-describe("hello command", () => {
-  test("greets by name", async () => {
-    const result = await createTestCli(runtime).run("hello World")
-    expect(result.stdout).toContain("Hello, World!")
-    expect(result.exitCode).toBe(0)
-  })
+describe("my-cli CLI", () => {
+  test("hello command runs", async () => {
+    const { stdout } = await execFileAsync("node", [
+      "--import", "tsx",
+      "src/index.ts",
+      "hello",
+    ])
 
-  test("shouts when flag is set", async () => {
-    const result = await createTestCli(runtime).run("hello World --shout")
-    expect(result.stdout).toContain("HELLO, WORLD!")
+    expect(stdout).toContain("Hello, World!")
   })
 })
 ```
 
 ## Plugin Project
 
-A distributable plugin package:
+A reusable plugin package for npm distribution.
 
 ### `package.json`
 ```json
 {
-  "name": "seedcli-plugin-example",
-  "version": "1.0.0",
+  "name": "my-plugin",
+  "version": "0.1.0",
   "type": "module",
-  "main": "src/index.ts",
-  "keywords": ["seedcli-plugin"],
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "import": "./src/index.ts",
+      "types": "./src/index.ts"
+    }
+  },
+  "files": ["dist", "LICENSE"],
+  "scripts": {
+    "build": "tsc --project tsconfig.build.json",
+    "prepublishOnly": "npm run build",
+    "test": "vitest run",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "typecheck": "tsc --noEmit"
+  },
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "dependencies": {
+    "@seedcli/core": "latest"
+  },
   "peerDependencies": {
-    "@seedcli/core": ">=1.0.0"
+    "@seedcli/core": "latest"
   },
   "devDependencies": {
-    "@seedcli/core": "latest",
+    "@biomejs/biome": "^2.4.4",
     "@seedcli/testing": "latest",
-    "@types/bun": "latest"
+    "@types/node": "^24.0.0",
+    "typescript": "^5.9.0",
+    "vitest": "^3.2.0"
+  },
+  "publishConfig": {
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "import": "./dist/index.js",
+        "types": "./dist/index.d.ts"
+      }
+    }
   }
 }
 ```
 
 ### `src/index.ts`
 ```ts
-import { definePlugin, command, arg, flag } from "@seedcli/core"
+import { definePlugin } from "@seedcli/core"
+import helloCommand from "./commands/hello.js"
+import { exampleExtension } from "./extensions/example.js"
+
+export type {} from "./types.js"
 
 export default definePlugin({
-  name: "example",
-  description: "Example plugin for Seed CLI",
-  version: "1.0.0",
-  seedcli: ">=1.0.0",
+  name: "my-plugin",
+  version: "0.1.0",
+  description: "Example plugin",
+  commands: [helloCommand],
+  extensions: [exampleExtension],
+})
+```
 
-  commands: [
-    command({
-      name: "example:hello",
-      description: "Hello from the example plugin",
-      args: { name: arg({ type: "string", default: "World" }) },
-      run: async (seed) => {
-        seed.print.info(`Hello from plugin: ${seed.args.name}!`)
-      },
-    }),
-    command({
-      name: "example:status",
-      description: "Show plugin status",
-      run: async (seed) => {
-        seed.ui.header("Example Plugin", { subtitle: "v1.0.0", color: "cyan" })
-        seed.ui.status("Plugin loaded", "success")
-        seed.ui.status("Config valid", "success")
-      },
-    }),
-  ],
+### `src/commands/hello.ts`
+```ts
+import { command, arg, flag } from "@seedcli/core"
 
-  extensions: [
-    {
-      name: "example-init",
-      description: "Initialize example plugin",
-      setup: async (seed) => {
-        seed.print.debug("Example plugin initialized")
-        seed.example = { initialized: true }
-      },
-    },
-  ],
+export default command({
+  name: "hello",
+  description: "Say hello",
+  args: {
+    name: arg({ type: "string", description: "Who to greet" }),
+  },
+  flags: {
+    loud: flag({ type: "boolean", default: false, alias: "l", description: "SHOUT the greeting" }),
+  },
+  run: async ({ args, flags, print }) => {
+    const name = args.name ?? "World"
+    const greeting = `Hello, ${name}!`
+    print.info(flags.loud ? greeting.toUpperCase() : greeting)
+  },
+})
+```
 
-  defaults: {
-    greeting: "Hello",
+### `src/extensions/example.ts`
+```ts
+import { defineExtension } from "@seedcli/core"
+
+export const exampleExtension = defineExtension({
+  name: "my-plugin",
+  description: "Example extension for my-plugin",
+  setup: (seed) => {
+    seed.print.muted("[my-plugin] extension loaded")
+    seed.my_plugin = {
+      greet: (name: string) => `Hello from my-plugin, ${name}!`,
+    }
   },
 })
 ```
@@ -231,8 +357,8 @@ export default definePlugin({
 ```ts
 declare module "@seedcli/core" {
   interface SeedExtensions {
-    example: {
-      initialized: boolean
+    my_plugin: {
+      greet(name: string): string
     }
   }
 }
@@ -240,18 +366,21 @@ declare module "@seedcli/core" {
 
 ### `tests/plugin.test.ts`
 ```ts
-import { createTestCli } from "@seedcli/testing"
+import { describe, expect, test } from "vitest"
 import { build } from "@seedcli/core"
-import { describe, test, expect } from "bun:test"
+import { createTestCli } from "@seedcli/testing"
+import plugin from "../src/index.js"
 
-const runtime = build("test-cli")
-  .plugin("./src")
-  .create()
+describe("my-plugin plugin", () => {
+  test("hello command runs", async () => {
+    const runtime = build("test-cli")
+      .plugin(plugin)
+      .version("0.1.0")
+      .create()
 
-describe("example plugin", () => {
-  test("hello command works", async () => {
-    const result = await createTestCli(runtime).run("example:hello Alice")
-    expect(result.stdout).toContain("Hello from plugin: Alice!")
+    const result = await createTestCli(runtime).run("hello")
+
+    expect(result.stdout).toContain("Hello, World!")
     expect(result.exitCode).toBe(0)
   })
 })

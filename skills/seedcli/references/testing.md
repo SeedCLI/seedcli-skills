@@ -1,16 +1,20 @@
 # @seedcli/testing
-> Test CLI commands with mocked prompts, config, and system calls.
+> Test CLI commands by capturing stdout/stderr, exit codes, and temporary environment variables.
 
 ## Import
 ```ts
 import { createTestCli, mockSeed, createInterceptor } from "@seedcli/testing"
-import { describe, test, expect } from "bun:test"
+import { describe, expect, test } from "vitest"
 ```
 
 ## Creating a Test CLI
 
 ```ts
-const runtime = build("my-cli").src("./src").create()
+import { build } from "@seedcli/core"
+
+const runtime = build("my-cli")
+  .src("./src")
+  .create()
 
 describe("greet command", () => {
   test("greets the user", async () => {
@@ -29,49 +33,26 @@ describe("greet command", () => {
 
 Result: `{ stdout: string, stderr: string, exitCode: number }`.
 
-## Mocking Prompts
+## Builder Methods
+
+`createTestCli(runtime)` returns a chainable builder with:
+- `mockPrompt(responses)`
+- `mockConfig(config)`
+- `mockSystem(command, result)`
+- `env(vars)`
+- `run(argv)`
+
+In the current implementation, only `env()` affects `run()`. The `mockPrompt()`, `mockConfig()`, and `mockSystem()` helpers are exposed on the builder but are not applied during execution yet.
 
 ```ts
 const result = await createTestCli(runtime)
-  .mockPrompt({
-    "Project name?": "my-app",
-    "Use TypeScript?": true,
-    "License?": "MIT",
-  })
-  .run("init")
-```
-
-## Mocking Config
-
-```ts
-const result = await createTestCli(runtime)
-  .mockConfig({ outputDir: "test-output", verbose: false })
-  .run("build")
-```
-
-## Mocking System Commands
-
-```ts
-const result = await createTestCli(runtime)
-  .mockSystem("git status", { stdout: "On branch main", stderr: "", exitCode: 0 })
-  .mockSystem("docker --version", { stdout: "Docker version 24.0.0" })
-  .run("deploy")
-```
-
-## Chaining Mocks
-
-```ts
-const result = await createTestCli(runtime)
-  .mockPrompt({ "Continue?": true })
-  .mockConfig({ env: "test" })
-  .mockSystem("git status", { stdout: "clean", stderr: "", exitCode: 0 })
   .env({ NODE_ENV: "test" })
   .run("deploy staging")
 ```
 
 ## Mock Seed
 
-Unit test command handlers directly:
+Unit-test command handlers directly:
 ```ts
 const seed = mockSeed({
   args: { environment: "staging" },
@@ -84,7 +65,9 @@ const seed = mockSeed({
 await deployCommand.run(seed)
 ```
 
-Options: `args`, `flags`, `commandName` ("test"), `brand` ("test-cli"), `version` ("0.0.0").
+Options: `args`, `flags`, `commandName`, `brand`, `version`.
+
+All module methods on the mock are no-ops by default, so override only the pieces your handler needs.
 
 ## Output Interceptor
 
@@ -98,9 +81,10 @@ console.error("Error!")
 interceptor.stop()
 expect(interceptor.stdout).toContain("Hello!")
 expect(interceptor.stderr).toContain("Error!")
+expect(interceptor.exitCode).toBe(0)
 ```
 
-Note: `createTestCli` uses an interceptor internally.
+`createTestCli()` uses an interceptor internally, so you only need `createInterceptor()` when testing output manually.
 
 ## Testing Patterns
 
@@ -113,26 +97,13 @@ test("rejects invalid port", async () => {
 })
 ```
 
-### Interactive flows
+### Environment-sensitive behavior
 ```ts
-test("init with prompts", async () => {
+test("uses CI defaults in non-interactive mode", async () => {
   const result = await createTestCli(runtime)
-    .mockPrompt({
-      "Project name?": "test-project",
-      "Use TypeScript?": true,
-      "Select features:": ["eslint", "prettier"],
-    })
+    .env({ CI: "1" })
     .run("init")
-  expect(result.exitCode).toBe(0)
-})
-```
 
-### Error handling
-```ts
-test("handles network errors", async () => {
-  const result = await createTestCli(runtime)
-    .mockSystem("curl https://api.example.com", { stdout: "", stderr: "Connection refused", exitCode: 1 })
-    .run("fetch-data")
-  expect(result.stderr).toContain("Failed to fetch")
+  expect(result.exitCode).toBe(0)
 })
 ```
