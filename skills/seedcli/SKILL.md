@@ -157,7 +157,7 @@ build("my-cli")
   .plugin("seedcli-plugin-docker") // Or load by package name
   .plugins("./plugins", { matching: "my-*" })
   .help()                          // Enable --help
-  .version()                       // Enable --version; auto-detect when .src() is set
+  .version()                       // Enable --version; auto-detect from package.json (works in both dev and bundled mode)
   .debug()                         // Enable --debug / --verbose
   .completions()                   // Add shell completions subcommand
   .middleware(fn)                  // Global middleware

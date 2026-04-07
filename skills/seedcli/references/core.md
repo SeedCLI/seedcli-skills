@@ -58,7 +58,7 @@ Register an extension.
 Enable or disable the built-in help system. Options: `showAliases`, `showHidden`.
 
 ### `.version(version?)` / `.noVersion()`
-Enable or disable the `--version` flag. If you call `.version()` without a string, Seed auto-detects the version from `package.json` when `.src()` has configured a source directory.
+Enable or disable the `--version` flag. If you call `.version()` without a string, Seed walks up from the entry script's location on disk to find the nearest `package.json` and reads its `version` field. This works in dev mode (`bun src/index.ts`), in bundled output (`node dist/index.js`), and for globally-installed CLIs — no need to import `package.json` yourself. (Fixed in v1.1.5; earlier versions only auto-detected when `.src()` was set, which silently broke in bundled mode.)
 
 ### `.debug()`
 Enable `--debug` and `--verbose`. When active, `seed.meta.debug` is `true`.
