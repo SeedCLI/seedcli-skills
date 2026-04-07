@@ -73,33 +73,63 @@ seed dev
 seed dev --entry src/index.ts
 ```
 
-`seed dev` runs your entry point with `node --watch`. Entry resolution order:
+`seed dev` runs your entry point with `node --watch`. For TypeScript entries (`.ts`, `.tsx`, `.mts`, `.cts`), it also loads the [`tsx`](https://tsx.is) ESM loader (`node --watch --import tsx ...`) so the standard TypeScript ESM conventions work:
+- `import "./foo.js"` resolves to `foo.ts` when only the TS source exists
+- `import "./foo"` (no extension) resolves to `foo.ts`, `foo.tsx`, etc.
+
+`tsx` is included as a dev dependency in scaffolded Full and Minimal projects. For plain `.js`/`.mjs` entries the loader is skipped.
+
+Entry resolution order:
 1. `seed.config.ts` -> `dev.entry`
 2. `package.json` -> `bin`
 3. Common defaults: `src/index.ts`, `src/cli.ts`, `index.ts`
 
+### Forwarding args to your entry script
+
+Anything after a literal `--` is forwarded as `process.argv` to the spawned entry script, and is preserved across hot reloads:
+```bash
+seed dev -- setup --from /tmp --dryRun
+```
+
+The entry script's `process.argv` will receive `["setup", "--from", "/tmp", "--dryRun"]`.
+
 ## `seed build`
 
-Bundle for Node.js or compile a standalone executable:
+`seed build` has two modes:
+
+- **Bundle mode** (default) — produces a plain JavaScript ES module at `dist/index.js`, suitable for `npm publish`. Typically tens of KB. Runs directly via `node dist/index.js` (or as a `bin` entry) on Node.js 24+.
+- **Compile mode** (`--compile`) — produces a standalone executable via Hakobu with an embedded Node runtime. Tens of MB. Use this when shipping binaries via GitHub Releases.
+
 ```bash
-seed build
-seed build --compile
+seed build                                                          # JS bundle to dist/index.js
+seed build --compile                                                # Standalone binary for host
 seed build --compile --target node24-macos-arm64,node24-linux-x64,node24-win-x64
 seed build --compile --target all
 seed build --outdir dist --minify --sourcemap
 ```
 
+### Bundle Mode Behavior (default)
+
+The bundle is a real JavaScript file (not a Mach-O / PE / ELF binary). `seed build` automatically:
+
+- **Externalizes** `dependencies`, `peerDependencies`, and `optionalDependencies` from `package.json` so the published tarball stays small and uses npm's normal install graph. Workspace packages and `devDependencies` are inlined. Subpaths (e.g. `react/jsx-runtime`) are matched against the package root.
+- **Adds a `#!/usr/bin/env node` shebang** unless the entry source already declares one (no double-shebang).
+- **`chmod +x`'s** the output so it works directly as a `bin` entry.
+- **Emits `dist/index.js.map`** when `--sourcemap` or `build.bundle.sourcemap` is set.
+
+Bundle mode uses **rolldown** under the hood, reused via Hakobu's transitive dep graph (so no second bundler is added to the install tree). Both `seed build` and `seed build --compile` therefore use the same bundler version.
+
 ### Build Flags
 
 | Flag | Description |
 |------|-------------|
-| `--compile` | Compile to a standalone executable via Hakobu |
+| `--compile` | Compile to a standalone executable via Hakobu (otherwise produce a JS bundle) |
 | `--outfile <path>, -o <path>` | Explicit output file path (single-target only) |
 | `--outdir <dir>` | Output directory (default: `dist`) |
-| `--target <targets>` | Compile target(s), comma-separated, or `all` |
+| `--target <targets>` | Compile target(s), comma-separated, or `all` (used with `--compile`) |
 | `--minify` | Minify output |
 | `--sourcemap` | Generate sourcemaps |
-| `--external <modules>` | Keep module(s) external (comma-separated) |
+| `--external <modules>` | Keep additional module(s) external (comma-separated). Works in both modes. |
 | `--splitting` | Parsed by the CLI but currently has no effect |
 | `--analyze` | Show bundle size analysis |
 
@@ -125,8 +155,11 @@ export default defineConfig({
   },
   build: {
     entry: "src/index.ts",
+    // Top-level external array — applies to both bundle and compile modes.
+    external: ["some-native-module"],
     bundle: {
       outdir: "dist",
+      sourcemap: true,
     },
     compile: {
       targets: ["node24-macos-arm64", "node24-linux-x64", "node24-win-x64"],
@@ -142,7 +175,8 @@ Bundle first:
 seed build
 ```
 
-Typical package configuration:
+`seed build` produces a real ES module at `dist/index.js` (typically tens of KB) with `dependencies`, `peerDependencies`, and `optionalDependencies` from `package.json` kept external. Point `bin` straight at it:
+
 ```json
 {
   "type": "module",
@@ -156,6 +190,8 @@ Typical package configuration:
   }
 }
 ```
+
+The bundle is `chmod +x`'d and gets a `#!/usr/bin/env node` shebang automatically, so it works directly as a `bin` entry.
 
 Then publish normally:
 ```bash
